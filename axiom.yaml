@@ -1,0 +1,29 @@
+name: axiom-official/axiom-durable-test
+version: 0.1.0
+language: go
+description: Deterministic nodes for manually testing durable-engine HITL, gates, breakpoints, and time-travel.
+nodes:
+    - name: Identity
+      description: Pass-through. Useful as a step counter and breakpoint anchor.
+      input: Message
+      output: Message
+    - name: Slow
+      description: Sleeps sleep_ms milliseconds (or 500ms default), letting breakpoints/pauses race-free.
+      input: SlowRequest
+      output: Message
+    - name: Counter
+      description: 'Deterministic counter: step=value+1, total=step*step. Drives modify-state inspector.'
+      input: Message
+      output: CounterState
+    - name: MaybeFail
+      description: Returns input.error_message as an error when fail=true. Drives gate failure policies.
+      input: MaybeFailRequest
+      output: Message
+    - name: SplitItems
+      description: Echoes the items array (or three defaults). Source for DynamicFanOutSpec.input_items_path.
+      input: SplitRequest
+      output: ItemBatch
+    - name: Echo
+      description: Logs and echoes; common HITL anchor in the test scenarios.
+      input: Message
+      output: Message

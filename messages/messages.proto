@@ -1,0 +1,65 @@
+// This file defines the data contracts (messages) for your Axiom package.
+// Every node's --input and --output refers to a message defined here.
+//
+// Run `axiom create message <Name>` to scaffold a new message below.
+// Run `axiom generate` to compile these definitions into language bindings in gen/.
+//
+// DOCUMENTATION
+//   Comments written directly above a message or field declaration are extracted
+//   automatically at publish time and shown in the Axiom registry as documentation.
+//   Write your descriptions there — no separate doc files needed.
+//
+//   Leading comment  (no blank line before the declaration) → registry description ✓
+//   Detached comment (blank line before the declaration)    → ignored by registry  ✗
+//
+// This file is yours to edit. Axiom only appends new message blocks — it never
+// overwrites or removes content you have written.
+
+syntax = "proto3";
+
+package axiom_official.axiom_durable_test;
+
+option go_package = ".;gen";
+
+message Message {
+  string text = 1;
+  int32 value = 2;
+  string note = 3;
+}
+
+message SlowRequest {
+  string text = 1;
+  int32 sleep_ms = 2;
+}
+
+message CounterState {
+  int32 step = 1;
+  int32 total = 2;
+  string last_text = 3;
+}
+
+message MaybeFailRequest {
+  string text = 1;
+  bool fail = 2;
+  string error_message = 3;
+}
+
+message SplitRequest {
+  string text = 1;
+  repeated string items = 2;
+}
+
+message ItemBatch {
+  string text = 1;
+  repeated string items = 2;
+}
+
+message ApprovalDecision {
+  bool approved = 1;
+  string reviewer_note = 2;
+}
+
+message ReviewerEdit {
+  string new_text = 1;
+  int32 new_value = 2;
+}
