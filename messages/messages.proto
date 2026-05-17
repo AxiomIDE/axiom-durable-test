@@ -63,3 +63,39 @@ message ReviewerEdit {
   string new_text = 1;
   int32 new_value = 2;
 }
+
+// ApprovalStatus is the enum used by ApprovalDecisionV2. Drives the
+// hitl-gates/enum coverage variant — exercises ProtoForm.tsx's Radix
+// Select rendering for enum fields (placeholder "Choose…", options
+// labelled "<NAME> (<number>)"). Coverage FR-007.
+enum ApprovalStatus {
+  APPROVAL_STATUS_UNSPECIFIED = 0;
+  APPROVED = 1;
+  REJECTED = 2;
+  NEEDS_CHANGES = 3;
+}
+
+// ApprovalDecisionV2 is an enum-bearing HITL resume schema. Successor to
+// ApprovalDecision (flat-scalar). Used as a hitl_config.resume_input_schema
+// in coverage specs that exercise the enum-rendering surface of the SPA.
+message ApprovalDecisionV2 {
+  ApprovalStatus status = 1;
+  string reviewer_note = 2;
+}
+
+// Reviewer is a small nested submessage used as a field inside
+// NestedReviewerDecision. Coverage FR-009.
+message Reviewer {
+  string name = 1;
+  string role = 2;
+}
+
+// NestedReviewerDecision is a nested-submessage HITL resume schema —
+// exercises ProtoForm.tsx's <details><summary> collapsible rendering for
+// nested fields and proto3 length-prefixed submessage wire encoding on
+// HITL resume. Coverage FR-009.
+message NestedReviewerDecision {
+  Reviewer reviewer = 1;
+  bool approved = 2;
+  string reviewer_note = 3;
+}
