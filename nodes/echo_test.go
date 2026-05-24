@@ -9,7 +9,7 @@ import (
 )
 
 func TestEcho_PrefixesText(t *testing.T) {
-	got, err := nodes.Echo(context.Background(), newTestContext(t), &gen.Message{Text: "hi", Value: 9})
+	got, err := nodes.Echo(context.Background(), newTestContext(t), &gen.Message{Text: "hi", Value: 9, Note: "world"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -18,5 +18,8 @@ func TestEcho_PrefixesText(t *testing.T) {
 	}
 	if got.GetValue() != 9 {
 		t.Errorf("Echo should preserve value; got %d", got.GetValue())
+	}
+	if got.GetNote() != "world" {
+		t.Errorf("Echo should preserve note; got %q", got.GetNote())
 	}
 }
