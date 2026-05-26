@@ -1,5 +1,5 @@
 name: axiom-official/axiom-durable-test
-version: 0.3.0
+version: 0.2.0
 language: go
 description: Deterministic nodes for manually testing durable-engine HITL, gates, breakpoints, time-travel, and flow reflection.
 nodes:
