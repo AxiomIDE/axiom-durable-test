@@ -14,10 +14,15 @@ import (
 type testContext struct {
 	t          *testing.T
 	secretsMap map[string]string
+	reflection axiom.Reflection
 }
 
 func newTestContext(t *testing.T) *testContext {
-	return &testContext{t: t, secretsMap: map[string]string{}}
+	return &testContext{
+		t:          t,
+		secretsMap: map[string]string{},
+		reflection: testReflection{}, // empty by default; nodes can override
+	}
 }
 
 type testLogger struct{ t *testing.T }
@@ -63,11 +68,57 @@ func (testSessionHistory) Last(_ context.Context, _ int) ([]axiom.ConversationTu
 }
 func (testSessionHistory) Append(_ context.Context, _, _ string) error { return nil }
 
-func (c *testContext) Log() axiom.Logger      { return &testLogger{c.t} }
-func (c *testContext) Secrets() axiom.Secrets { return testSecrets{c.secretsMap} }
-func (c *testContext) Agent() axiom.Agent     { return testAgent{} }
-func (c *testContext) ExecutionID() string    { return "test-execution-id" }
-func (c *testContext) FlowID() string         { return "test-flow-id" }
-func (c *testContext) TenantID() string       { return "test-tenant-id" }
+func (c *testContext) Log() axiom.Logger             { return &testLogger{c.t} }
+func (c *testContext) Secrets() axiom.Secrets        { return testSecrets{c.secretsMap} }
+func (c *testContext) Agent() axiom.Agent            { return testAgent{} }
+func (c *testContext) ExecutionID() string           { return "test-execution-id" }
+func (c *testContext) FlowID() string                { return "test-flow-id" }
+func (c *testContext) TenantID() string              { return "test-tenant-id" }
+func (c *testContext) Reflection() axiom.Reflection  { return c.reflection }
 
 var _ axiom.Context = (*testContext)(nil)
+
+// ADR-050 (2026-05-26): testReflection lets a test inject a deterministic
+// FlowReflection so node-under-test logic can be exercised without running
+// the worker. The default newTestContext returns an empty FlowReflection
+// (no nodes / no edges / zero position) so existing nodes (Identity, Echo,
+// etc.) don't need to set anything. ReflectionProbe is the first node
+// where the reflection contents matter, so its test injects a populated
+// fixture.
+
+type testReflection struct {
+	flow axiom.FlowReflection
+}
+
+func (r testReflection) Flow() axiom.FlowReflection {
+	if r.flow == nil {
+		return emptyFlowReflection{}
+	}
+	return r.flow
+}
+
+type emptyFlowReflection struct{}
+
+func (emptyFlowReflection) Nodes() []axiom.ReflectionNode     { return nil }
+func (emptyFlowReflection) Edges() []axiom.ReflectionEdge     { return nil }
+func (emptyFlowReflection) LoopEdges() []axiom.ReflectionEdge { return nil }
+func (emptyFlowReflection) Position() axiom.FlowPosition      { return axiom.FlowPosition{} }
+func (emptyFlowReflection) GraphID() string                   { return "" }
+
+// fixtureFlowReflection is a fully-populated FlowReflection used by
+// reflection_probe_test.go. Mirrors the structure the worker would
+// construct for a 2-node graph: Identity (instance 0) → ReflectionProbe
+// (instance 1).
+type fixtureFlowReflection struct {
+	nodes     []axiom.ReflectionNode
+	edges     []axiom.ReflectionEdge
+	loopEdges []axiom.ReflectionEdge
+	position  axiom.FlowPosition
+	graphID   string
+}
+
+func (f fixtureFlowReflection) Nodes() []axiom.ReflectionNode     { return f.nodes }
+func (f fixtureFlowReflection) Edges() []axiom.ReflectionEdge     { return f.edges }
+func (f fixtureFlowReflection) LoopEdges() []axiom.ReflectionEdge { return f.loopEdges }
+func (f fixtureFlowReflection) Position() axiom.FlowPosition      { return f.position }
+func (f fixtureFlowReflection) GraphID() string                   { return f.graphID }

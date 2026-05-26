@@ -1,10 +1,14 @@
 name: axiom-official/axiom-durable-test
-version: 0.2.0
+version: 0.3.0
 language: go
-description: Deterministic nodes for manually testing durable-engine HITL, gates, breakpoints, and time-travel.
+description: Deterministic nodes for manually testing durable-engine HITL, gates, breakpoints, time-travel, and flow reflection.
 nodes:
     - name: Identity
       description: Pass-through. Useful as a step counter and breakpoint anchor.
+      input: Message
+      output: Message
+    - name: ReflectionProbe
+      description: ADR-050 witness — reads ax.Reflection().Flow() and JSON-serializes a snapshot (graph_id, node/edge counts, current_instance, depth, my node name, downstream names, conditional-edge flag) into Message.text. Input value/note pass through unchanged.
       input: Message
       output: Message
     - name: Slow

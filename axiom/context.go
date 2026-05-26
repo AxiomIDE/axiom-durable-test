@@ -104,6 +104,58 @@ type Agent interface {
 	Memory() AgentMemory
 }
 
+// ADR-050 (2026-05-26): ax.Reflection().Flow() — read-only view of the
+// running flow graph + current execution position. Surfaced as
+// ax.reflection.flow.* in the Python SDK; the Go interface namespaces it
+// under Reflection() so future per-domain reflection surfaces (Execution,
+// Tenant) can land without breaking signatures.
+
+// ReflectionNode is one node placement in the running flow.
+type ReflectionNode struct {
+	InstanceID        uint32
+	NodeULID          string
+	Name              string
+	PackageName       string
+	PackageVersion    string
+	NodeType          string // "node" | "subflow" | "pipeline"
+	InputMessageName  string
+	OutputMessageName string
+	CanvasNodeID      string
+}
+
+// ReflectionEdge is one edge (forward or loop) in the running flow.
+type ReflectionEdge struct {
+	SrcInstance   uint32
+	DstInstance   uint32
+	CanvasEdgeID  string
+	HasCondition  bool
+	HasAdapter    bool
+	MaxIterations uint32
+}
+
+// FlowPosition describes where the current invocation sits in the running flow.
+type FlowPosition struct {
+	CurrentInstance      uint32
+	Depth                uint32
+	LoopIterations       map[uint32]uint32
+	SubflowStackGraphIDs []string
+}
+
+// FlowReflection is the read-only view of the running flow graph + position.
+// Obtain via ax.Reflection().Flow().
+type FlowReflection interface {
+	Nodes() []ReflectionNode
+	Edges() []ReflectionEdge
+	LoopEdges() []ReflectionEdge
+	Position() FlowPosition
+	GraphID() string
+}
+
+// Reflection is the reflection capability bundle.
+type Reflection interface {
+	Flow() FlowReflection
+}
+
 // Context is the single platform capability injection point for every node
 // handler function. It is passed as the second parameter (ax) to every handler:
 //
@@ -136,4 +188,9 @@ type Context interface {
 
 	// TenantID returns the UUID of the tenant that owns this invocation.
 	TenantID() string
+
+	// Reflection returns the read-only view of the running flow.
+	// Today: ax.Reflection().Flow(). Future: Execution(), Tenant().
+	// See ADR-050 (2026-05-26).
+	Reflection() Reflection
 }
