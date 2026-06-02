@@ -68,13 +68,13 @@ func (testSessionHistory) Last(_ context.Context, _ int) ([]axiom.ConversationTu
 }
 func (testSessionHistory) Append(_ context.Context, _, _ string) error { return nil }
 
-func (c *testContext) Log() axiom.Logger             { return &testLogger{c.t} }
-func (c *testContext) Secrets() axiom.Secrets        { return testSecrets{c.secretsMap} }
-func (c *testContext) Agent() axiom.Agent            { return testAgent{} }
-func (c *testContext) ExecutionID() string           { return "test-execution-id" }
-func (c *testContext) FlowID() string                { return "test-flow-id" }
-func (c *testContext) TenantID() string              { return "test-tenant-id" }
-func (c *testContext) Reflection() axiom.Reflection  { return c.reflection }
+func (c *testContext) Log() axiom.Logger            { return &testLogger{c.t} }
+func (c *testContext) Secrets() axiom.Secrets       { return testSecrets{c.secretsMap} }
+func (c *testContext) Agent() axiom.Agent           { return testAgent{} }
+func (c *testContext) ExecutionID() string          { return "test-execution-id" }
+func (c *testContext) FlowID() string               { return "test-flow-id" }
+func (c *testContext) TenantID() string             { return "test-tenant-id" }
+func (c *testContext) Reflection() axiom.Reflection { return c.reflection }
 
 // ADR-051 (2026-05-26): ax.Mutation().Flow().AddNode / AddEdge stub for
 // node-under-test compilation. Tests don't exercise the mutation path
@@ -90,7 +90,7 @@ func (testMutation) Flow() axiom.FlowMutation { return testFlowMutation{} }
 type testFlowMutation struct{}
 
 func (testFlowMutation) AddNode(_, _ string, _ *axiom.CanvasPosition) uint32 { return 0 }
-func (testFlowMutation) AddEdge(_, _ uint32)                                 {}
+func (testFlowMutation) AddEdge(_, _ uint32, _ *axiom.EdgeCondition)         {}
 
 var _ axiom.Context = (*testContext)(nil)
 
