@@ -99,3 +99,13 @@ message NestedReviewerDecision {
   bool approved = 2;
   string reviewer_note = 3;
 }
+
+// StreamFrame is one emitted frame from a streaming type:pipeline node.
+// is_final marks the last frame in the stream at the business/payload
+// level — distinct from the transport-level NodeResponse.IsFinal sentinel
+// the platform appends automatically after the node function returns.
+message StreamFrame {
+  int32 index = 1;
+  string text = 2;
+  bool is_final = 3;
+}

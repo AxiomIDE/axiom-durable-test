@@ -110,7 +110,9 @@ type Agent interface {
 // under Reflection() so future per-domain reflection surfaces (Execution,
 // Tenant) can land without breaking signatures.
 
-// ReflectionNode is one node placement in the running flow.
+// ReflectionNode is one node placement in the running flow. The InputMessageName
+// and OutputMessageName are fully-qualified proto names; field-level
+// introspection is not yet exposed.
 type ReflectionNode struct {
 	InstanceID        uint32
 	NodeULID          string
@@ -121,24 +123,43 @@ type ReflectionNode struct {
 	InputMessageName  string
 	OutputMessageName string
 	CanvasNodeID      string
+	GridCol           int32 // ADR-086: coarse-grid column (flow depth, left->right)
+	GridRow           int32 // ADR-086: coarse-grid row (parallel lane, top->down)
+}
+
+// ConditionSummary is the agent-readable digest of an edge's dispatch
+// condition (ADR-055 / GAP-4 (2026-05-29)). It lets a node see WHAT an edge
+// dispatches on — e.g. Field="tools", Op="EQ", Operands=["ToolX"] means
+// "ToolX" ∈ tools — so it can make idempotent decisions (skip re-adding an
+// already-wired tool) without the compiled CEL.
+type ConditionSummary struct {
+	Field    string   // dotted field path, e.g. "tools"
+	Op       string   // short op name (EQ | NEQ | CONTAINS | ...)
+	Operands []string // comparison operand(s)
 }
 
 // ReflectionEdge is one edge (forward or loop) in the running flow.
+// HasCondition / HasAdapter are structural flags only — the compiled
+// CEL/adapter recipe itself is not exposed by design. MaxIterations is
+// meaningful only for entries returned by FlowReflection.LoopEdges().
+// ADR-055 (2026-05-29): ConditionSummary exposes the leaf predicate
+// (field/op/operands) when the edge is conditional, else nil.
 type ReflectionEdge struct {
-	SrcInstance   uint32
-	DstInstance   uint32
-	CanvasEdgeID  string
-	HasCondition  bool
-	HasAdapter    bool
-	MaxIterations uint32
+	SrcInstance      uint32
+	DstInstance      uint32
+	CanvasEdgeID     string
+	HasCondition     bool
+	HasAdapter       bool
+	MaxIterations    uint32
+	ConditionSummary *ConditionSummary
 }
 
 // FlowPosition describes where the current invocation sits in the running flow.
 type FlowPosition struct {
 	CurrentInstance      uint32
-	Depth                uint32
-	LoopIterations       map[uint32]uint32
-	SubflowStackGraphIDs []string
+	Depth                uint32            // 0 at the root flow
+	LoopIterations       map[uint32]uint32 // keyed by loop-head dst_instance
+	SubflowStackGraphIDs []string          // root → immediate parent
 }
 
 // FlowReflection is the read-only view of the running flow graph + position.
@@ -151,7 +172,9 @@ type FlowReflection interface {
 	GraphID() string
 }
 
-// Reflection is the reflection capability bundle.
+// Reflection is the reflection capability bundle. Today exposes only Flow();
+// future surfaces (Execution, Tenant) land here without changing node
+// function signatures.
 type Reflection interface {
 	Flow() FlowReflection
 }
@@ -193,4 +216,113 @@ type Context interface {
 	// Today: ax.Reflection().Flow(). Future: Execution(), Tenant().
 	// See ADR-050 (2026-05-26).
 	Reflection() Reflection
+
+	// Mutation returns the mid-execution flow-mutation surface.
+	// Today: ax.Mutation().Flow().AddNode / AddEdge. See ADR-051.
+	Mutation() Mutation
 }
+
+// TelemetryOf returns the tenant-safe telemetry surface for this invocation
+// (ADR-073). It is a package-level accessor rather than a Context method on
+// purpose: adding a method to the Context interface would break every existing
+// package's committed test double. In production it buffers to the sidecar (the
+// sole collector egress); under `axiom dev` / unit tests it is a no-op.
+//
+//	axiom.TelemetryOf(ax).AddEvent("cache_hit", axiom.Int("size", 42))
+func TelemetryOf(ax Context) Telemetry {
+	if c, ok := ax.(telemetryCarrier); ok {
+		return c.AxiomTelemetry()
+	}
+	return noopTelemetry{}
+}
+
+// telemetryCarrier is implemented by the production AxiomContext so TelemetryOf
+// can reach the per-invocation buffer without touching the Context interface.
+type telemetryCarrier interface{ AxiomTelemetry() Telemetry }
+
+type noopTelemetry struct{}
+
+func (noopTelemetry) AddEvent(string, ...Attr)          {}
+func (noopTelemetry) Counter(string, float64, ...Attr)  {}
+func (noopTelemetry) Histogram(string, float64, ...Attr) {}
+
+// Telemetry is the tenant-safe node telemetry surface (ADR-073). All calls buffer
+// in-process and are flushed to the sidecar on handler return; the sidecar is the
+// sole collector egress. Secret-keyed attributes are dropped at the sidecar.
+type Telemetry interface {
+	// AddEvent records a named event (with optional attributes) on the node's
+	// invocation span.
+	AddEvent(name string, attrs ...Attr)
+	// Counter adds value to a named custom counter (metric axiom_node_<name>).
+	Counter(name string, value float64, attrs ...Attr)
+	// Histogram records value into a named custom histogram.
+	Histogram(name string, value float64, attrs ...Attr)
+}
+
+// Attr is a typed telemetry attribute. Build one with String/Int/Float/Bool.
+// Value holds string | int64 | float64 | bool.
+type Attr struct {
+	Key   string
+	Value any
+}
+
+// String/Int/Float/Bool construct a typed telemetry Attr.
+func String(key, value string) Attr { return Attr{Key: key, Value: value} }
+func Int(key string, value int64) Attr { return Attr{Key: key, Value: value} }
+func Float(key string, value float64) Attr { return Attr{Key: key, Value: value} }
+func Bool(key string, value bool) Attr { return Attr{Key: key, Value: value} }
+
+// ADR-051 (2026-05-26): ax.Mutation().Flow().* — append-only mutation
+// of the running flow. Nodes declared with mutation_capable: true in
+// axiom.yaml may call AddNode / AddEdge during their handler; calls
+// buffer locally and are flushed to NodeResponse.MutationBatch on
+// return. Rejections surface as MutationError when the next handler
+// invocation's request carries a deterministic
+// "axiom: mutation rejected: ..." error_message prefix.
+
+// CanvasPosition is an optional layout hint for an added node.
+type CanvasPosition struct {
+	X float64
+	Y float64
+	// ADR-086: coarse-grid cell. When set (non-zero), the worker places the
+	// node at this cell and derives the pixel position; the canvas snaps to the
+	// same grid. GridCol/GridRow take precedence over X/Y.
+	GridCol int32
+	GridRow int32
+}
+
+// EdgeCondition is an optional structural predicate gating a mutation-added
+// edge (ADR-054 / GAP-1 (2026-05-29)). A leaf on a repeated field has ANY
+// semantics, so {Op:"EQ", Field:"tools", Value:"ToolX"} expresses "ToolX" in
+// tools — letting AddTool wire a conditional dispatch edge that fires only on
+// turns the reasoner selects it. Structural only — no CEL, no adapter.
+type EdgeCondition struct {
+	Op    string // EQ | NEQ | LT | LTE | GT | GTE | CONTAINS | ... Empty -> EQ.
+	Field string // dotted field path on the source node's output message
+	Value string // comparison operand (string form)
+}
+
+// FlowMutation is the mutation surface for the running flow.
+// AddNode returns the batch-local instance id the SDK has assigned;
+// use it on subsequent AddEdge calls within the same handler.
+type FlowMutation interface {
+	AddNode(packageName, packageVersion string, canvasPosition *CanvasPosition) uint32
+	// AddEdge wires an edge from src to dst. Pass a non-nil condition
+	// (ADR-054) for a conditional dispatch edge; pass nil for an
+	// unconditional edge (v1 behaviour).
+	AddEdge(srcInstance, dstInstance uint32, condition *EdgeCondition)
+}
+
+// Mutation is the mutation capability bundle. Today exposes only Flow();
+// future surfaces (Config) land here.
+type Mutation interface {
+	Flow() FlowMutation
+}
+
+// MutationError is raised when the platform rejects a buffered mutation.
+// Message is the human-readable reason (everything after the
+// "axiom: mutation rejected: " prefix). The structured engine code is
+// not exposed (ADR-051 trust boundary).
+type MutationError struct{ Message string }
+
+func (e *MutationError) Error() string { return e.Message }

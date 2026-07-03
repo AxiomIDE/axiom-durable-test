@@ -31,3 +31,8 @@ nodes:
       description: Logs and echoes; common HITL anchor in the test scenarios.
       input: Message
       output: Message
+    - name: StreamEcho
+      description: 'Streaming pipeline witness: emits N frames of Message.text, the last carrying is_final=true. e2e-gate coverage for the streaming type:pipeline dispatch path (COV-STREAMING-PIPELINE-NODE-E2E).'
+      input: Message
+      output: StreamFrame
+      type: pipeline
