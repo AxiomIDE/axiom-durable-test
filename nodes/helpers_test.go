@@ -1,6 +1,7 @@
 package nodes_test
 
 import (
+	"context"
 	"testing"
 
 	"axiom-official/axiom-durable-test/axiom"
@@ -57,6 +58,42 @@ type testFlowMutation struct{}
 
 func (testFlowMutation) AddNode(_, _ string, _ *axiom.CanvasPosition) uint32 { return 0 }
 func (testFlowMutation) AddEdge(_, _ uint32, _ *axiom.EdgeCondition)         {}
+
+// ADR-128/129 (2026-07-11): axiom.Context gained Agent() (ax.Agent().Memory().*)
+// for the agentic-memory surface. `axiom push` regenerates the fixture's axiom/
+// package from the current CLI template, so the Context interface assertion below
+// now requires Agent() to compile. These fixtures don't exercise the memory path,
+// so inject an empty agent/memory — the same no-op-stub pattern as Mutation()
+// and Reflection() above.
+func (c *testContext) Agent() axiom.Agent { return testAgent{} }
+
+type testAgent struct{}
+
+func (testAgent) Memory() axiom.AgentMemory { return testAgentMemory{} }
+
+type testAgentMemory struct{}
+
+func (testAgentMemory) Session(string) axiom.SessionMemory { return testSessionMemory{} }
+func (testAgentMemory) Search(context.Context, string, int) ([]axiom.MemoryEntry, error) {
+	return nil, nil
+}
+func (testAgentMemory) Write(context.Context, string, float32) (string, error) { return "", nil }
+
+type testSessionMemory struct{}
+
+func (testSessionMemory) Search(context.Context, string, int) ([]axiom.MemoryEntry, error) {
+	return nil, nil
+}
+func (testSessionMemory) Write(context.Context, string, float32) (string, error) { return "", nil }
+func (testSessionMemory) History() axiom.SessionHistory                          { return testSessionHistory{} }
+func (testSessionMemory) End(context.Context) error                              { return nil }
+
+type testSessionHistory struct{}
+
+func (testSessionHistory) Last(context.Context, int) ([]axiom.ConversationTurn, error) {
+	return nil, nil
+}
+func (testSessionHistory) Append(context.Context, string, string) error { return nil }
 
 var _ axiom.Context = (*testContext)(nil)
 
