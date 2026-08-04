@@ -109,3 +109,37 @@ message StreamFrame {
   string text = 2;
   bool is_final = 3;
 }
+
+// ReviewDecision is the input of the Decide node — and, deliberately, a HITL
+// resume-form contract that carries ONE FIELD OF EVERY KIND the console's
+// resume form renders: a string, an int32, an optional string, a bool
+// checkbox, a repeated-string add/remove editor, a nested-message
+// <details><summary> collapsible, and an enum Radix Select.
+//
+// WHY IT IS A NODE INPUT AND NOT A FREE-STANDING MESSAGE (AxiomIDE/poc#1354,
+// 2026-08-03): a HITL resume value BECOMES the paused node's input payload —
+// sidecar.SidecarRequest carries no other channel for it — so a node's
+// `hitl.resume_input_schema` must BE that node's own input message. The
+// package's earlier resume-form schemas (ApprovalDecision, ApprovalDecisionV2,
+// NestedReviewerDecision, ReviewerEdit) are the input of NO node, so a flow
+// pausing on Identity/Echo and declaring one of them could never actually
+// resume onto it. That only ever looked fine because a platform defect
+// discarded the resume value entirely; once the value really reaches the node,
+// those schemas have no live home and the e2e coverage for bool / repeated /
+// nested / enum resume controls has nowhere to run. Decide + ReviewDecision is
+// that home.
+//
+// FIELD NUMBERS 1-3 MIRROR `Message` ON PURPOSE (text, value, note, same types
+// and same tags), so `Message` wire bytes decode cleanly into ReviewDecision.
+// That lets an ordinary Identity/Echo placement feed a Decide placement with
+// no edge adapter, which is what keeps the hitl-gates fixtures a plain linear
+// chain.
+message ReviewDecision {
+  string text = 1;
+  int32 value = 2;
+  string note = 3;
+  bool approved = 4;
+  repeated string items = 5;
+  Reviewer reviewer = 6;
+  ApprovalStatus status = 7;
+}
