@@ -23,6 +23,30 @@ type Logger interface {
 	Error(msg string, args ...any)
 }
 
+// SecretStatus is the typed result of Secrets.Status(name) — ADR-156.
+//
+// Get(name) alone returns ("", false) both when a secret was revoked after
+// execution start and when it was never configured at all — a node cannot
+// tell "re-authorize this credential" from "check axiom.yaml" from that
+// result alone. Use Status when the distinction matters.
+type SecretStatus int
+
+const (
+	// SecretStatusAvailable means the secret currently resolves to a value;
+	// Get(name) returns it.
+	SecretStatusAvailable SecretStatus = iota
+	// SecretStatusRevoked means the secret existed in this execution's
+	// initial snapshot but no longer resolves against the live vault — it
+	// was deleted or revoked after the execution started. Get(name) returns
+	// ("", false).
+	SecretStatusRevoked
+	// SecretStatusUnset means the secret was never present for this node —
+	// never configured by the tenant, or (for a non-owned node) not
+	// authorized. Get(name) returns ("", false), identically to
+	// SecretStatusRevoked.
+	SecretStatusUnset
+)
+
 // Secrets provides read-only access to the tenant secrets resolved by the
 // platform at invocation time. Values are plaintext strings; the platform
 // handles encryption and decryption. Node authors never construct a Secrets
@@ -31,6 +55,31 @@ type Secrets interface {
 	// Get returns the value for the named secret and true when present.
 	// Returns ("", false) when the secret was not resolved for this invocation.
 	Get(name string) (string, bool)
+}
+
+// SecretStatusOf reports the typed status of a declared secret — ADR-156.
+//
+// Get(name) alone returns ("", false) both when a secret was revoked after
+// execution start and when it was never configured — this helper tells them
+// apart. Call it as axiom.SecretStatusOf(ax.Secrets(), "NAME").
+//
+// ADR-156 (2026-07-20): status is a FREE HELPER, not a method on the Secrets
+// interface, precisely so the accessor is BACKWARD-COMPATIBLE: adding a method
+// to Secrets would break every existing node's hand-written test double (and
+// any other implementer) at recompile time. When the Secrets implementation is
+// the platform's, this reports the real Available/Revoked/Unset distinction; a
+// double that only implements Get degrades to Available (present) or Unset
+// (absent) — never a false Revoked.
+func SecretStatusOf(s Secrets, name string) SecretStatus {
+	if sr, ok := s.(interface {
+		Status(string) SecretStatus
+	}); ok {
+		return sr.Status(name)
+	}
+	if _, ok := s.Get(name); ok {
+		return SecretStatusAvailable
+	}
+	return SecretStatusUnset
 }
 
 // ADR-129 (2026-07-11): agentic memory (ax.Agent().Memory()) is out of scope
@@ -135,13 +184,13 @@ type Context interface {
 	// Use for API keys and connection strings.
 	Secrets() Secrets
 
-	// ExecutionID returns the UUID of the current execution.
+	// ExecutionID returns the ID of the current execution.
 	ExecutionID() string
 
 	// FlowID returns the stable ID of the graph artifact (constant across executions).
 	FlowID() string
 
-	// TenantID returns the UUID of the tenant that owns this invocation.
+	// TenantID returns the ID of the tenant that owns this invocation.
 	TenantID() string
 
 	// Reflection returns the read-only view of the running flow.
@@ -238,7 +287,12 @@ type EdgeCondition struct {
 // AddNode returns the batch-local instance id the SDK has assigned;
 // use it on subsequent AddEdge calls within the same handler.
 type FlowMutation interface {
-	AddNode(packageName, packageVersion string, canvasPosition *CanvasPosition) uint32
+	// AddNode declares the exact node to append: (package, version, node name).
+	// Any resolvable node is addable — including nodes from the emitter's own
+	// package — and a package may carry any number of mutation-capable nodes
+	// (mutation gap closure P1/P2, 2026-08-01; supersedes the v1
+	// one-mutation-entry-point-per-package rule).
+	AddNode(packageName, packageVersion, nodeName string, canvasPosition *CanvasPosition) uint32
 	// AddEdge wires an edge from src to dst. Pass a non-nil condition
 	// (ADR-054) for a conditional dispatch edge; pass nil for an
 	// unconditional edge (v1 behaviour).

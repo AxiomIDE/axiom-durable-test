@@ -1,5 +1,5 @@
 name: axiom-official/axiom-durable-test
-version: 0.2.0
+version: 0.3.0
 language: go
 description: Deterministic nodes for manually testing durable-engine HITL, gates, breakpoints, time-travel, and flow reflection.
 nodes:
@@ -30,6 +30,10 @@ nodes:
     - name: Echo
       description: Logs and echoes; common HITL anchor in the test scenarios.
       input: Message
+      output: Message
+    - name: Decide
+      description: 'HITL resume anchor: its INPUT carries one field of every kind the resume form renders (string, int32, bool, repeated string, nested message, enum). Passes text/value through and summarises the rest into note, so a downstream Echo proves the reviewer''s submitted value reached the node.'
+      input: ReviewDecision
       output: Message
     - name: StreamEcho
       description: 'Streaming pipeline witness: emits N frames of Message.text, the last carrying is_final=true. e2e-gate coverage for the streaming type:pipeline dispatch path (COV-STREAMING-PIPELINE-NODE-E2E).'
